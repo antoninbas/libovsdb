@@ -537,6 +537,8 @@ func TestBaseTypeMarshalUnmarshalJSON(t *testing.T) {
 	valMax := int64(4294967295)
 	minInt64 := int64(math.MinInt64)
 	maxInt64 := int64(math.MaxInt64)
+	minLength := 1
+	maxLength := 64
 	strong := "strong"
 	tests := []struct {
 		name         string
@@ -599,6 +601,20 @@ func TestBaseTypeMarshalUnmarshalJSON(t *testing.T) {
 			[]byte(`{"type":"integer","minInteger":0,"maxInteger": 4294967295}`),
 			BaseType{Type: TypeInteger, minInteger: &zero, maxInteger: &valMax},
 			[]byte(`{"type":"integer","minInteger":0,"maxInteger": 4294967295}`),
+			false,
+		},
+		{
+			"string with min and max length",
+			[]byte(`{"type":"string","minLength":1,"maxLength":64}`),
+			BaseType{Type: TypeString, minLength: &minLength, maxLength: &maxLength},
+			[]byte(`{"type":"string","minLength":1,"maxLength":64}`),
+			false,
+		},
+		{
+			"string with max length only",
+			[]byte(`{"type":"string","maxLength":64}`),
+			BaseType{Type: TypeString, maxLength: &maxLength},
+			[]byte(`{"type":"string","maxLength":64}`),
 			false,
 		},
 		{

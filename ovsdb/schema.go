@@ -415,7 +415,7 @@ func (b *BaseType) UnmarshalJSON(data []byte) error {
 	b.maxReal = bt.MaxReal
 	b.minInteger = bt.MinInteger
 	b.maxInteger = bt.MaxInteger
-	b.minLength = bt.MaxLength
+	b.minLength = bt.MinLength
 	b.maxLength = bt.MaxLength
 	b.refTable = bt.RefTable
 	b.refType = bt.RefType
@@ -441,7 +441,7 @@ func (b BaseType) MarshalJSON() ([]byte, error) {
 		MaxReal:    b.maxReal,
 		MinInteger: b.minInteger,
 		MaxInteger: b.maxInteger,
-		MinLength:  b.maxLength,
+		MinLength:  b.minLength,
 		MaxLength:  b.maxLength,
 		RefTable:   b.refTable,
 		RefType:    b.refType,
