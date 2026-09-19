@@ -21,6 +21,8 @@ func TestSchema(t *testing.T) {
 	zero := 0
 	one := 1
 	two := 2
+	one64 := int64(1)
+	two64 := int64(2)
 	oneReal := 1.1
 	twoReal := 2.2
 	boolTrue := true
@@ -254,8 +256,8 @@ func TestSchema(t *testing.T) {
 									Key: &BaseType{
 										Type:       TypeInteger,
 										Enum:       []any{one, two},
-										minInteger: &one,
-										maxInteger: &two,
+										minInteger: &one64,
+										maxInteger: &two64,
 									},
 									max: &Unlimited,
 									min: &zero,
@@ -531,8 +533,12 @@ func TestTable(t *testing.T) {
 
 func TestBaseTypeMarshalUnmarshalJSON(t *testing.T) {
 	datapath := "Datapath"
-	zero := 0
-	valMax := 4294967295
+	zero := int64(0)
+	valMax := int64(4294967295)
+	minInt64 := int64(math.MinInt64)
+	maxInt64 := int64(math.MaxInt64)
+	minLength := 1
+	maxLength := 64
 	strong := "strong"
 	tests := []struct {
 		name         string
@@ -595,6 +601,27 @@ func TestBaseTypeMarshalUnmarshalJSON(t *testing.T) {
 			[]byte(`{"type":"integer","minInteger":0,"maxInteger": 4294967295}`),
 			BaseType{Type: TypeInteger, minInteger: &zero, maxInteger: &valMax},
 			[]byte(`{"type":"integer","minInteger":0,"maxInteger": 4294967295}`),
+			false,
+		},
+		{
+			"string with min and max length",
+			[]byte(`{"type":"string","minLength":1,"maxLength":64}`),
+			BaseType{Type: TypeString, minLength: &minLength, maxLength: &maxLength},
+			[]byte(`{"type":"string","minLength":1,"maxLength":64}`),
+			false,
+		},
+		{
+			"string with max length only",
+			[]byte(`{"type":"string","maxLength":64}`),
+			BaseType{Type: TypeString, maxLength: &maxLength},
+			[]byte(`{"type":"string","maxLength":64}`),
+			false,
+		},
+		{
+			"int with 64-bit min and max",
+			[]byte(`{"type":"integer","minInteger":-9223372036854775808,"maxInteger":9223372036854775807}`),
+			BaseType{Type: TypeInteger, minInteger: &minInt64, maxInteger: &maxInt64},
+			[]byte(`{"type":"integer","minInteger":-9223372036854775808,"maxInteger":9223372036854775807}`),
 			false,
 		},
 	}
@@ -800,7 +827,7 @@ func TestColumnSchemaMarshalUnmarshalJSON(t *testing.T) {
 func TestBaseTypeSimpleAtomic(t *testing.T) {
 	b := BaseType{Type: TypeString}
 	assert.True(t, b.simpleAtomic())
-	valMax := 1024
+	valMax := int64(1024)
 	b1 := BaseType{Type: TypeInteger, maxInteger: &valMax}
 	assert.False(t, b1.simpleAtomic())
 }
@@ -886,7 +913,8 @@ func TestBaseTypeMaxReal(t *testing.T) {
 }
 
 func TestBaseTypeMinInteger(t *testing.T) {
-	value := 1024
+	value := int64(1024)
+	belowMinInt32 := int64(math.MinInt32) - 1
 	tests := []struct {
 		name    string
 		bt      *BaseType
@@ -902,13 +930,20 @@ func TestBaseTypeMinInteger(t *testing.T) {
 		{
 			"nil",
 			&BaseType{Type: TypeInteger},
-			int(math.Pow(-2, 63)),
+			math.MinInt,
 			false,
 		},
 		{
 			"set",
 			&BaseType{Type: TypeInteger, minInteger: &value},
-			value,
+			1024,
+			false,
+		},
+		{
+			"set below MinInt32",
+			&BaseType{Type: TypeInteger, minInteger: &belowMinInt32},
+			// Clamped to math.MinInt on 32-bit platforms.
+			int(max(belowMinInt32, math.MinInt)),
 			false,
 		},
 	}
@@ -926,11 +961,99 @@ func TestBaseTypeMinInteger(t *testing.T) {
 }
 
 func TestBaseTypeMaxInteger(t *testing.T) {
-	value := 1024
+	value := int64(1024)
+	aboveMaxInt32 := int64(math.MaxUint32)
 	tests := []struct {
 		name    string
 		bt      *BaseType
 		want    int
+		wantErr bool
+	}{
+		{
+			"not an int",
+			&BaseType{Type: TypeUUID},
+			0,
+			true,
+		},
+		{
+			"nil",
+			&BaseType{Type: TypeInteger},
+			math.MaxInt,
+			false,
+		},
+		{
+			"set",
+			&BaseType{Type: TypeInteger, maxInteger: &value},
+			1024,
+			false,
+		},
+		{
+			"set above MaxInt32",
+			&BaseType{Type: TypeInteger, maxInteger: &aboveMaxInt32},
+			// Clamped to math.MaxInt on 32-bit platforms.
+			int(min(aboveMaxInt32, math.MaxInt)),
+			false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := tt.bt.MaxInteger()
+			if tt.wantErr {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+			}
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestBaseTypeMinInteger64(t *testing.T) {
+	value := int64(math.MinInt32) - 1
+	tests := []struct {
+		name    string
+		bt      *BaseType
+		want    int64
+		wantErr bool
+	}{
+		{
+			"not an int",
+			&BaseType{Type: TypeUUID},
+			0,
+			true,
+		},
+		{
+			"nil",
+			&BaseType{Type: TypeInteger},
+			math.MinInt64,
+			false,
+		},
+		{
+			"set",
+			&BaseType{Type: TypeInteger, minInteger: &value},
+			value,
+			false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := tt.bt.MinInteger64()
+			if tt.wantErr {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+			}
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestBaseTypeMaxInteger64(t *testing.T) {
+	value := int64(math.MaxUint32)
+	tests := []struct {
+		name    string
+		bt      *BaseType
+		want    int64
 		wantErr bool
 	}{
 		{
@@ -954,7 +1077,7 @@ func TestBaseTypeMaxInteger(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := tt.bt.MaxInteger()
+			got, err := tt.bt.MaxInteger64()
 			if tt.wantErr {
 				require.Error(t, err)
 			} else {
@@ -963,6 +1086,30 @@ func TestBaseTypeMaxInteger(t *testing.T) {
 			assert.Equal(t, tt.want, got)
 		})
 	}
+}
+
+// TestBaseTypeUnmarshalLargeIntegerBounds checks that integer bounds which do
+// not fit in a 32-bit int (e.g., the maxInteger of Interface.ifindex in the
+// Open_vSwitch schema) can be decoded on all platforms, and that the exact
+// values are preserved.
+func TestBaseTypeUnmarshalLargeIntegerBounds(t *testing.T) {
+	var bt BaseType
+	err := json.Unmarshal([]byte(`{"type":"integer","minInteger":-4294967295,"maxInteger":4294967295}`), &bt)
+	require.NoError(t, err)
+
+	min64, err := bt.MinInteger64()
+	require.NoError(t, err)
+	assert.Equal(t, int64(-4294967295), min64)
+	max64, err := bt.MaxInteger64()
+	require.NoError(t, err)
+	assert.Equal(t, int64(4294967295), max64)
+
+	minInt, err := bt.MinInteger()
+	require.NoError(t, err)
+	assert.Equal(t, int(max(min64, math.MinInt)), minInt)
+	maxInt, err := bt.MaxInteger()
+	require.NoError(t, err)
+	assert.Equal(t, int(min(max64, math.MaxInt)), maxInt)
 }
 
 func TestBaseTypeMinLength(t *testing.T) {
@@ -1022,7 +1169,7 @@ func TestBaseTypeMaxLength(t *testing.T) {
 		{
 			"nil",
 			&BaseType{Type: TypeString},
-			math.MaxInt64,
+			math.MaxInt,
 			false,
 		},
 		{

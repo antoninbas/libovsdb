@@ -65,6 +65,19 @@ jobs:
         if: steps.old-benchmark.outputs.cache-hit != 'true' && github.ref == 'refs/heads/main'
         run: cp -f bench.out bench-main.out
 
+  test-32bit:
+    name: Unit Test (32-bit)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v6
+
+      - name: Install tools
+        uses: jdx/mise-action@v2
+
+      - name: Test
+        run: make test-32bit
+
   test:
     name: Integration Test
     needs: build
