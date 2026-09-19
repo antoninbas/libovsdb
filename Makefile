@@ -34,6 +34,13 @@ test: prebuild
 	@echo "+ $@"
 	@go test -race -coverprofile=unit.cov -test.short -timeout 30s -v $(if $(TESTS),-run $(TESTS)) ./...
 
+# Run unit tests on a 32-bit platform, where int is 32 bits. The race detector
+# is not supported on 386.
+.PHONY: test-32bit
+test-32bit: prebuild
+	@echo "+ $@"
+	@GOARCH=386 go test -test.short -timeout 60s -v $(if $(TESTS),-run $(TESTS)) ./...
+
 .PHONY: integration-test
 integration-test:
 	@echo "+ $@"
